@@ -39,6 +39,7 @@ class MainActivity : ComponentActivity() {
 
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
+                    containerColor = androidx.compose.ui.graphics.Color.White,
                     bottomBar = {
                         NavigationBar {
                             items.forEach { item ->
@@ -52,7 +53,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 ) { padding ->
-                    Surface(modifier = Modifier.fillMaxSize().padding(padding)) {
+                    Surface(modifier = Modifier.fillMaxSize().padding(padding), color = androidx.compose.ui.graphics.Color.White) {
                         when (selectedTab) {
                             BottomNavItem.Home -> HomeScreen(
                                 userName = "John Doe",

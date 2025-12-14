@@ -87,6 +87,7 @@ fun TodayTasksScreen(
     val tasks = remember { sampleTodayTasks() }
 
     Scaffold(
+        containerColor = Color.White,
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text("Today’s Tasks") },
@@ -106,6 +107,7 @@ fun TodayTasksScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .background(Color.White)
                 .padding(padding)
                 .padding(horizontal = 16.dp)
         ) {

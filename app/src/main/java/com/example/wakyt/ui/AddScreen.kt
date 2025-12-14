@@ -68,7 +68,7 @@ import java.util.Locale
 
 private enum class AddMode { TASK, PROJECT }
 
-private enum class Repeat { NONE, DAILY, WEEKLY, CUSTOM }
+private enum class Repeat { NONE, DAILY, CUSTOM }
 
 private data class TaskGroupItem(
     val id: String,
@@ -258,10 +258,15 @@ private fun AddProjectForm(
                     title = { Text("New Task Group") },
                     text = {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            // Simple icon picker: a few letters
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                listOf("G", "W", "P", "S", "T").forEach { label ->
-                                    OutlinedButton(onClick = { selectedIcon = label }) { Text(label) }
+                            // Icon picker: horizontally scrollable options
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                val iconOptions = listOf("G","W","P","S","T","H","L","A","B","C","D","E","F","I","J","K","M","N","O","Q","R","U","V","X","Y","Z","☆","★","✓")
+                                items(iconOptions.size) { idx ->
+                                    val label = iconOptions[idx]
+                                    val selected = selectedIcon == label
+                                    OutlinedButton(onClick = { selectedIcon = label }) {
+                                        Text(if (selected) "[$label]" else label)
+                                    }
                                 }
                             }
                             OutlinedTextField(
@@ -400,7 +405,6 @@ private fun AddTaskForm(projects: List<ProjectItem>) {
         val allDates: List<Calendar> = when (repeat) {
             Repeat.NONE -> listOf(date)
             Repeat.DAILY -> listOf(date) // simplified: just check first occurrence
-            Repeat.WEEKLY -> listOf(date)
             Repeat.CUSTOM -> listOf(date) // Validation simplified; actual recurrence not generated here
         }
         allDates.all { !it.before(p.start) && !it.after(p.end) }
@@ -439,11 +443,10 @@ private fun AddTaskForm(projects: List<ProjectItem>) {
             }
 
             SectionHeader("Repeat")
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                RepeatChip("None", repeat == Repeat.NONE) { repeat = Repeat.NONE }
-                RepeatChip("Every day", repeat == Repeat.DAILY) { repeat = Repeat.DAILY }
-                RepeatChip("Once a week", repeat == Repeat.WEEKLY) { repeat = Repeat.WEEKLY }
-                RepeatChip("Custom", repeat == Repeat.CUSTOM) { repeat = Repeat.CUSTOM }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                RepeatChip("None", repeat == Repeat.NONE, modifier = Modifier.weight(1f)) { repeat = Repeat.NONE }
+                RepeatChip("Every day", repeat == Repeat.DAILY, modifier = Modifier.weight(1f)) { repeat = Repeat.DAILY }
+                RepeatChip("Custom", repeat == Repeat.CUSTOM, modifier = Modifier.weight(1f)) { repeat = Repeat.CUSTOM }
             }
             if (repeat == Repeat.CUSTOM) {
                 // Show selectable days of week horizontally
@@ -493,10 +496,10 @@ private fun AddTaskForm(projects: List<ProjectItem>) {
 }
 
 @Composable
-private fun RepeatChip(text: String, selected: Boolean, onClick: () -> Unit) {
+private fun RepeatChip(text: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     OutlinedButton(
         onClick = onClick,
-        modifier = Modifier,
+        modifier = modifier,
         border = if (selected) null else null
     ) { Text(text) }
 }
