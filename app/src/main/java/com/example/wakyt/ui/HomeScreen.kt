@@ -131,6 +131,8 @@ fun HomeScreen(
     onOpenTaskGroup: (TaskGroup) -> Unit,
 ) {
     val (projects, groups) = remember { sampleData() }
+    // Keep runtime task status updates so progress indicators react dynamically
+    val statusOverrides = remember { mutableStateMapOf<String, TaskStatus>() }
     var period by remember { mutableStateOf(ProgressPeriod.TODAY) }
     var expandedProjectId by remember { mutableStateOf<String?>(null) }
 
@@ -151,8 +153,10 @@ fun HomeScreen(
         ProgressPeriod.MONTH -> { offset -> isInCurrentMonth(offset) }
     }
 
-    val allPeriodTasks = remember(period) {
-        projects.flatMap { it.tasks }.filter { periodFilter(it.dateOffsetDays) }
+    val allPeriodTasks = remember(period, statusOverrides) {
+        projects.flatMap { it.tasks }
+            .map { t -> if (statusOverrides.containsKey(t.id)) t.copy(status = statusOverrides[t.id]!!) else t }
+            .filter { periodFilter(it.dateOffsetDays) }
     }
     val doneCount = allPeriodTasks.count { it.status == TaskStatus.DONE }
     val totalCount = allPeriodTasks.size.coerceAtLeast(1)
@@ -186,7 +190,9 @@ fun HomeScreen(
         // In Progress Section
         item {
             val activeProjects = projects.map { p ->
-                val ptasks = p.tasks.filter { periodFilter(it.dateOffsetDays) }
+                val ptasks = p.tasks
+                    .map { t -> if (statusOverrides.containsKey(t.id)) t.copy(status = statusOverrides[t.id]!!) else t }
+                    .filter { periodFilter(it.dateOffsetDays) }
                 val d = ptasks.count { it.status == TaskStatus.DONE }
                 val t = ptasks.size.coerceAtLeast(1)
                 val pr = d.toFloat() / t.toFloat()
@@ -217,7 +223,10 @@ fun HomeScreen(
         item {
             val project = projects.find { it.id == expandedProjectId }
             if (project != null) {
-                val ptasks = project.tasks.filter { periodFilter(it.dateOffsetDays) }.sortedBy { it.time }
+                val ptasks = project.tasks
+                    .map { t -> if (statusOverrides.containsKey(t.id)) t.copy(status = statusOverrides[t.id]!!) else t }
+                    .filter { periodFilter(it.dateOffsetDays) }
+                    .sortedBy { it.time }
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         text = "${project.groupName} · ${project.projectName}",
@@ -227,7 +236,7 @@ fun HomeScreen(
                     ptasks.forEach { task ->
                         TaskRow(
                             task = task,
-                            onMarkDone = { /* In-memory state: emulate by no-op */ },
+                            onMarkDone = { statusOverrides[task.id] = TaskStatus.DONE },
                             onAddTask = { onAddTask(project) }
                         )
                     }
@@ -245,7 +254,9 @@ fun HomeScreen(
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     groups.forEach { group ->
-                        val periodTasks = group.tasks.filter { periodFilter(it.dateOffsetDays) }
+                        val periodTasks = group.tasks
+                            .map { t -> if (statusOverrides.containsKey(t.id)) t.copy(status = statusOverrides[t.id]!!) else t }
+                            .filter { periodFilter(it.dateOffsetDays) }
                         val d = periodTasks.count { it.status == TaskStatus.DONE }
                         val t = periodTasks.size.coerceAtLeast(1)
                         val pr = d.toFloat() / t.toFloat()

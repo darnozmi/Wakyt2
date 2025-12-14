@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import com.example.wakyt.ui.theme.WAKYTTheme
 import com.example.wakyt.ui.HomeScreen
 import com.example.wakyt.ui.TodayTasksScreen
+import com.example.wakyt.ui.AddScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -56,7 +57,7 @@ class MainActivity : ComponentActivity() {
                             BottomNavItem.Home -> HomeScreen(
                                 userName = "John Doe",
                                 onOpenProfile = { selectedTab = BottomNavItem.Profile },
-                                onOpenSettings = { /* TODO: open settings screen */ },
+                                onOpenSettings = { selectedTab = BottomNavItem.Profile },
                                 onViewTasks = { _ -> selectedTab = BottomNavItem.Today },
                                 onAddTask = { _ -> selectedTab = BottomNavItem.Add },
                                 onOpenTaskGroup = { _ -> selectedTab = BottomNavItem.Summary }
@@ -65,7 +66,7 @@ class MainActivity : ComponentActivity() {
                                 onBack = { selectedTab = BottomNavItem.Home },
                                 onOpenSettings = { /* TODO: open notifications/settings screen */ }
                             )
-                            BottomNavItem.Add -> SimpleCenterTextScreen("Add Task")
+                            BottomNavItem.Add -> AddScreen()
                             BottomNavItem.Summary -> SimpleCenterTextScreen("Summary")
                             BottomNavItem.Profile -> SimpleCenterTextScreen("Profile")
                         }
