@@ -65,24 +65,16 @@ import coil.compose.AsyncImage
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import androidx.compose.runtime.collectAsState
+import com.example.wakyt.data.AppRepository
+import com.example.wakyt.data.TaskGroup as RepoTaskGroup
+import com.example.wakyt.data.Project as RepoProject
 
 private enum class AddMode { TASK, PROJECT }
 
 private enum class Repeat { NONE, DAILY, CUSTOM }
 
-private data class TaskGroupItem(
-    val id: String,
-    val name: String,
-    val iconLabel: String // simple 1-letter placeholder shown in a circle
-)
-
-private data class ProjectItem(
-    val id: String,
-    val name: String,
-    val groupId: String?,
-    val start: Calendar,
-    val end: Calendar
-)
+// Local placeholder data classes removed — using shared models from AppRepository
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -90,21 +82,9 @@ fun AddScreen() {
     // Default mode is Add Task
     var mode by remember { mutableStateOf(AddMode.TASK) }
 
-    // In-memory groups and projects to support selection/validation
-    val groups = remember {
-        mutableStateListOf(
-            TaskGroupItem("g1", "Work", "W"),
-            TaskGroupItem("g2", "Personal", "P")
-        )
-    }
-    val projects = remember {
-        // Create one sample project within the current month
-        val start = Calendar.getInstance().apply { set(Calendar.DAY_OF_MONTH, 1) }
-        val end = (start.clone() as Calendar).apply { set(Calendar.DAY_OF_MONTH, getActualMaximum(Calendar.DAY_OF_MONTH)) }
-        mutableStateListOf(
-            ProjectItem("p1", "Android App", "g1", start, end)
-        )
-    }
+    // Observe shared data from the single source of truth (AppRepository)
+    val groups by AppRepository.taskGroups.collectAsState(initial = emptyList())
+    val projects by AppRepository.projects.collectAsState(initial = emptyList())
 
     val title = when (mode) { AddMode.TASK -> "Add Task"; AddMode.PROJECT -> "Add Project" }
 
@@ -140,7 +120,7 @@ fun AddScreen() {
         ) {
             when (mode) {
                 AddMode.TASK -> AddTaskForm(projects)
-                AddMode.PROJECT -> AddProjectForm(groups, projects)
+                AddMode.PROJECT -> AddProjectForm(groups)
             }
         }
     }
@@ -154,13 +134,12 @@ private fun SectionHeader(text: String) {
 // ---------------- Add Project ----------------
 @Composable
 private fun AddProjectForm(
-    groups: MutableList<TaskGroupItem>,
-    projects: MutableList<ProjectItem>,
+    groups: List<RepoTaskGroup>,
 ) {
     val context = LocalContext.current
 
     // Task group select
-    var selectedGroup by remember { mutableStateOf<TaskGroupItem?>(groups.firstOrNull()) }
+    var selectedGroup by remember { mutableStateOf<RepoTaskGroup?>(groups.firstOrNull()) }
     var isGroupDialogOpen by remember { mutableStateOf(false) }
     var isNewGroupDialogOpen by remember { mutableStateOf(false) }
 
@@ -180,14 +159,17 @@ private fun AddProjectForm(
 
     val isValid = projectName.isNotBlank() && !startDate.after(endDate)
 
-    Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors()) {
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
+    ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             SectionHeader("Task Group")
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .background(Color.White)
                     .clickable { isGroupDialogOpen = true }
                     .padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -247,8 +229,7 @@ private fun AddProjectForm(
                     confirmButton = {
                         TextButton(onClick = {
                             if (newGroupName.isNotBlank()) {
-                                val item = TaskGroupItem("g" + (groups.size + 1), newGroupName, selectedIcon)
-                                groups.add(0, item)
+                                val item = AppRepository.addTaskGroup(newGroupName, selectedIcon)
                                 selectedGroup = item
                                 isNewGroupDialogOpen = false
                             }
@@ -314,7 +295,7 @@ private fun AddProjectForm(
                         modifier = Modifier
                             .size(48.dp)
                             .clip(RoundedCornerShape(8.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .background(Color.White)
                     )
                 } else {
                     Text(
@@ -322,7 +303,7 @@ private fun AddProjectForm(
                         modifier = Modifier
                             .size(48.dp)
                             .clip(RoundedCornerShape(8.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .background(Color.White)
                             .padding(12.dp)
                     )
                 }
@@ -331,15 +312,14 @@ private fun AddProjectForm(
 
             Button(
                 onClick = {
-                    // Save into in-memory projects list
-                    val item = ProjectItem(
-                        id = "p" + (projects.size + 1),
+                    // Save via shared repository so all screens update
+                    AppRepository.addProject(
                         name = projectName.trim(),
                         groupId = selectedGroup?.id,
                         start = (startDate.clone() as Calendar),
-                        end = (endDate.clone() as Calendar)
+                        end = (endDate.clone() as Calendar),
+                        logoUri = logoUri
                     )
-                    projects.add(0, item)
                     // Optional: clear fields
                     projectName = ""
                     projectDescription = ""
@@ -380,7 +360,7 @@ private fun DateField(label: String, date: Calendar, onPick: (Calendar) -> Unit)
 
 // ---------------- Add Task ----------------
 @Composable
-private fun AddTaskForm(projects: List<ProjectItem>) {
+private fun AddTaskForm(projects: List<RepoProject>) {
     val context = LocalContext.current
     var taskName by remember { mutableStateOf("") }
     var taskDescription by remember { mutableStateOf("") }
@@ -398,7 +378,7 @@ private fun AddTaskForm(projects: List<ProjectItem>) {
 
     // Assign to Project (optional)
     var assignExpanded by remember { mutableStateOf(false) }
-    var assignedProject by remember { mutableStateOf<ProjectItem?>(null) }
+    var assignedProject by remember { mutableStateOf<RepoProject?>(null) }
 
     // Validation against project dates
     val dateValid: Boolean = assignedProject?.let { p ->
@@ -412,7 +392,10 @@ private fun AddTaskForm(projects: List<ProjectItem>) {
 
     val isValid = taskName.isNotBlank() && dateValid
 
-    Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors()) {
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
+    ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             SectionHeader("Task Name")
             OutlinedTextField(
@@ -490,7 +473,22 @@ private fun AddTaskForm(projects: List<ProjectItem>) {
                 )
             }
 
-            Button(onClick = { /* TODO: create Task */ }, enabled = isValid) { Text("Add Task") }
+            Button(
+                onClick = {
+                    val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(date.time)
+                    val timeStr = String.format(Locale.getDefault(), "%02d:%02d", timeHour, timeMinute)
+                    AppRepository.addTask(
+                        name = taskName.trim(),
+                        projectId = assignedProject?.id,
+                        date = dateStr,
+                        time = timeStr
+                    )
+                    // reset fields minimally
+                    taskName = ""
+                    taskDescription = ""
+                },
+                enabled = isValid
+            ) { Text("Add Task") }
         }
     }
 }
