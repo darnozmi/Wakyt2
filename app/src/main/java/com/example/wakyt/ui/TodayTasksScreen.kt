@@ -149,15 +149,7 @@ fun TodayTasksScreen(
                 .padding(padding)
                 .padding(horizontal = 16.dp)
         ) {
-            CalendarSection(
-                isExpanded = isExpanded,
-                selectedOffset = selectedDateOffset,
-                tasksPerDate = remember(tasks) { tasks.groupBy { it.dateOffsetDays }.mapValues { it.value.size } },
-                onSelectOffset = { selectedDateOffset = it },
-                onToggleExpand = { isExpanded = !isExpanded }
-            )
-
-            Spacer(Modifier.height(12.dp))
+            // Calendar moved to Summary screen (Table of Contents).
 
             FilterSection(
                 selected = selectedFilter,

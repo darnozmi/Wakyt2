@@ -27,6 +27,7 @@ import com.example.wakyt.ui.theme.WAKYTTheme
 import com.example.wakyt.ui.HomeScreen
 import com.example.wakyt.ui.TodayTasksScreen
 import com.example.wakyt.ui.AddScreen
+import com.example.wakyt.ui.SummaryScreen
 import com.example.wakyt.data.AppRepository
 
 class MainActivity : ComponentActivity() {
@@ -71,7 +72,7 @@ class MainActivity : ComponentActivity() {
                                 onOpenSettings = { /* TODO: open notifications/settings screen */ }
                             )
                             BottomNavItem.Add -> AddScreen()
-                            BottomNavItem.Summary -> SimpleCenterTextScreen("Summary")
+                            BottomNavItem.Summary -> SummaryScreen()
                             BottomNavItem.Profile -> SimpleCenterTextScreen("Profile")
                         }
                     }
