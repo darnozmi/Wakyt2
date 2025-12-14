@@ -30,12 +30,28 @@ data class Project(
     val logoUri: Uri? = null
 )
 
+enum class TaskState { TODO, IN_PROGRESS, DONE }
+
 data class Task(
     val id: String,
     val name: String,
     val projectId: String?,
     val date: String?, // yyyy-MM-dd (optional for now)
-    val time: String?  // HH:mm (optional for now)
+    val time: String?,  // HH:mm (optional for now)
+    val status: TaskState = TaskState.TODO
+)
+
+data class UserProfile(
+    val name: String,
+    val email: String,
+    val photoUri: Uri? = null,
+)
+
+data class AppSettings(
+    val notificationsEnabled: Boolean = true,
+    val reminderMinutesBefore: Int = 10,
+    val theme: String = "light", // light|dark (simple placeholder)
+    val language: String = "en"
 )
 
 /**
@@ -57,6 +73,16 @@ object AppRepository {
 
     private val _tasks = MutableStateFlow<List<Task>>(emptyList())
     val tasks: StateFlow<List<Task>> = _tasks.asStateFlow()
+
+    // Profile/settings/session
+    private val _userProfile = MutableStateFlow(UserProfile(name = "John Doe", email = "john@example.com", photoUri = null))
+    val userProfile: StateFlow<UserProfile> = _userProfile.asStateFlow()
+
+    private val _settings = MutableStateFlow(AppSettings())
+    val settings: StateFlow<AppSettings> = _settings.asStateFlow()
+
+    private val _isLoggedIn = MutableStateFlow(true)
+    val isLoggedIn: StateFlow<Boolean> = _isLoggedIn.asStateFlow()
 
     // Simple id generator (persisted)
     private var counter: Long = System.currentTimeMillis()
@@ -111,10 +137,47 @@ object AppRepository {
         if (projectId != null && _projects.value.none { it.id == projectId }) {
             throw IllegalArgumentException("Project $projectId does not exist")
         }
-        val new = Task(id = nextId("t"), name = name, projectId = projectId, date = date, time = time)
+        val new = Task(id = nextId("t"), name = name, projectId = projectId, date = date, time = time, status = TaskState.TODO)
         _tasks.value = _tasks.value + new
         persistAsync()
         return new
+    }
+
+    fun updateTaskStatus(taskId: String, status: TaskState) {
+        val updated = _tasks.value.map { if (it.id == taskId) it.copy(status = status) else it }
+        _tasks.value = updated
+        persistAsync()
+    }
+
+    fun updateProfile(name: String? = null, email: String? = null, photoUri: Uri? = null) {
+        val curr = _userProfile.value
+        _userProfile.value = curr.copy(
+            name = name ?: curr.name,
+            email = email ?: curr.email,
+            photoUri = photoUri ?: curr.photoUri
+        )
+        persistAsync()
+    }
+
+    fun updateSettings(
+        notificationsEnabled: Boolean? = null,
+        reminderMinutesBefore: Int? = null,
+        theme: String? = null,
+        language: String? = null,
+    ) {
+        val curr = _settings.value
+        _settings.value = curr.copy(
+            notificationsEnabled = notificationsEnabled ?: curr.notificationsEnabled,
+            reminderMinutesBefore = reminderMinutesBefore ?: curr.reminderMinutesBefore,
+            theme = theme ?: curr.theme,
+            language = language ?: curr.language,
+        )
+        persistAsync()
+    }
+
+    fun setLoggedIn(value: Boolean) {
+        _isLoggedIn.value = value
+        persistAsync()
     }
 
     // ---------------- Persistence helpers ----------------
@@ -140,6 +203,9 @@ object AppRepository {
         val p1 = Project(id = "p1", name = "Android App", groupId = work.id, start = start, end = end)
         _projects.value = listOf(p1)
         _tasks.value = emptyList()
+        _userProfile.value = UserProfile(name = "John Doe", email = "john@example.com", photoUri = null)
+        _settings.value = AppSettings()
+        _isLoggedIn.value = true
         persistAsync()
     }
 
@@ -153,6 +219,7 @@ object AppRepository {
             val file = File(ctx.filesDir, FILE_NAME)
             val root = JSONObject().apply {
                 put("counter", currentCounter)
+                put("isLoggedIn", _isLoggedIn.value)
                 put("groups", JSONArray().apply {
                     snapshotGroups.forEach { g ->
                         put(JSONObject().apply {
@@ -182,8 +249,22 @@ object AppRepository {
                             put("projectId", t.projectId)
                             put("date", t.date)
                             put("time", t.time)
+                            put("status", t.status.name)
                         })
                     }
+                })
+                put("profile", JSONObject().apply {
+                    val up = _userProfile.value
+                    put("name", up.name)
+                    put("email", up.email)
+                    put("photoUri", up.photoUri?.toString())
+                })
+                put("settings", JSONObject().apply {
+                    val s = _settings.value
+                    put("notificationsEnabled", s.notificationsEnabled)
+                    put("reminderMinutesBefore", s.reminderMinutesBefore)
+                    put("theme", s.theme)
+                    put("language", s.language)
                 })
             }
             file.writeText(root.toString())
@@ -194,6 +275,7 @@ object AppRepository {
         val text = file.readText()
         val root = JSONObject(text)
         counter = root.optLong("counter", System.currentTimeMillis())
+        _isLoggedIn.value = root.optBoolean("isLoggedIn", true)
         val groupsJson = root.optJSONArray("groups") ?: JSONArray()
         val projectsJson = root.optJSONArray("projects") ?: JSONArray()
         val tasksJson = root.optJSONArray("tasks") ?: JSONArray()
@@ -236,7 +318,8 @@ object AppRepository {
                     name = o.getString("name"),
                     projectId = if (o.isNull("projectId")) null else o.getString("projectId"),
                     date = o.optString("date", null).let { if (it.isNullOrBlank()) null else it },
-                    time = o.optString("time", null).let { if (it.isNullOrBlank()) null else it }
+                    time = o.optString("time", null).let { if (it.isNullOrBlank()) null else it },
+                    status = runCatching { TaskState.valueOf(o.optString("status", TaskState.TODO.name)) }.getOrDefault(TaskState.TODO)
                 )
             )
         }
@@ -244,5 +327,22 @@ object AppRepository {
         _taskGroups.value = loadedGroups
         _projects.value = loadedProjects
         _tasks.value = loadedTasks
+
+        // Profile & settings
+        root.optJSONObject("profile")?.let { p ->
+            _userProfile.value = UserProfile(
+                name = p.optString("name", "John Doe"),
+                email = p.optString("email", "john@example.com"),
+                photoUri = p.optString("photoUri", null)?.let { if (it.isBlank()) null else Uri.parse(it) }
+            )
+        }
+        root.optJSONObject("settings")?.let { s ->
+            _settings.value = AppSettings(
+                notificationsEnabled = s.optBoolean("notificationsEnabled", true),
+                reminderMinutesBefore = s.optInt("reminderMinutesBefore", 10),
+                theme = s.optString("theme", "light"),
+                language = s.optString("language", "en")
+            )
+        }
     }
 }
