@@ -27,10 +27,13 @@ import com.example.wakyt.ui.theme.WAKYTTheme
 import com.example.wakyt.ui.HomeScreen
 import com.example.wakyt.ui.TodayTasksScreen
 import com.example.wakyt.ui.AddScreen
+import com.example.wakyt.data.AppRepository
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Initialize shared repository with persistence so data is loaded/saved across runs
+        AppRepository.init(applicationContext)
         enableEdgeToEdge()
         setContent {
             WAKYTTheme {

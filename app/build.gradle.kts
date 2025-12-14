@@ -54,6 +54,7 @@ dependencies {
     // Image loading for logo picker
     implementation("io.coil-kt:coil-compose:2.6.0")
     implementation("androidx.navigation:navigation-compose:2.8.3")
+    // No-op: persistence implemented via simple JSON file; no extra deps needed
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
