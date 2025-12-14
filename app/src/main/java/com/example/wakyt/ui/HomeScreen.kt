@@ -34,11 +34,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.wakyt.R
+import androidx.compose.runtime.collectAsState
+import com.example.wakyt.data.AppRepository
+import java.text.ParseException
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 
-// --- Models ---
+// --- UI Models (mapped from repository data) ---
 enum class TaskStatus { DONE, FAILED, PLANNED }
 
 data class Task(
@@ -102,23 +105,26 @@ private fun currentMonthLabel(): String {
 }
 
 // --- Sample data ---
-private fun sampleData(): Pair<List<Project>, List<TaskGroup>> {
-    val tasksOffice = listOf(
-        Task("t1", "Standup Meeting", "09:00", 0, TaskStatus.DONE),
-        Task("t2", "Email Cleanup", "10:30", 0, TaskStatus.FAILED),
-        Task("t3", "Design Review", "14:00", 0, TaskStatus.PLANNED),
-    )
-    val tasksPersonal = listOf(
-        Task("t4", "Workout", "07:00", 0, TaskStatus.DONE),
-        Task("t5", "Grocery Shopping", "18:00", 1, TaskStatus.PLANNED),
-    )
-    val office = Project("p1", null, "Office Project", "Android App", tasksOffice)
-    val personal = Project("p2", null, "Personal Project", "Life Admin", tasksPersonal)
-
-    val groupWork = TaskGroup("g1", null, "Work", tasksOffice + tasksPersonal)
-    val groupHome = TaskGroup("g2", null, "Home", tasksPersonal)
-    return (listOf(office, personal) to listOf(groupWork, groupHome))
+private fun computeDateOffsetDays(dateStr: String?): Int {
+    if (dateStr.isNullOrBlank()) return 0
+    return try {
+        val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val cal = Calendar.getInstance().apply {
+            time = fmt.parse(dateStr)!!
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val today = calendarToday()
+        val diffMillis = cal.timeInMillis - today.timeInMillis
+        (diffMillis / (24 * 60 * 60 * 1000)).toInt()
+    } catch (e: ParseException) {
+        0
+    }
 }
+
+//
 
 // --- Home Screen ---
 @Composable
@@ -130,7 +136,53 @@ fun HomeScreen(
     onAddTask: (Project) -> Unit,
     onOpenTaskGroup: (TaskGroup) -> Unit,
 ) {
-    val (projects, groups) = remember { sampleData() }
+    // Observe repository flows
+    val repoProjects by AppRepository.projects.collectAsState(initial = emptyList())
+    val repoGroups by AppRepository.taskGroups.collectAsState(initial = emptyList())
+    val repoTasks by AppRepository.tasks.collectAsState(initial = emptyList())
+
+    // Map repository models to UI models used in this screen
+    val projects: List<Project> = remember(repoProjects, repoGroups, repoTasks) {
+        repoProjects.map { p ->
+            val groupName = repoGroups.firstOrNull { it.id == p.groupId }?.name ?: ""
+            val ptasks = repoTasks.filter { it.projectId == p.id }.map { t ->
+                Task(
+                    id = t.id,
+                    title = t.name,
+                    time = t.time ?: "",
+                    dateOffsetDays = computeDateOffsetDays(t.date),
+                    status = TaskStatus.PLANNED
+                )
+            }
+            Project(
+                id = p.id,
+                iconRes = null,
+                groupName = if (groupName.isBlank()) "Project" else groupName,
+                projectName = p.name,
+                tasks = ptasks
+            )
+        }
+    }
+    val groups: List<TaskGroup> = remember(repoProjects, repoGroups, repoTasks) {
+        repoGroups.map { g ->
+            val gProjectIds = repoProjects.filter { it.groupId == g.id }.map { it.id }.toSet()
+            val gtasks = repoTasks.filter { it.projectId == null || gProjectIds.contains(it.projectId) }.map { t ->
+                Task(
+                    id = t.id,
+                    title = t.name,
+                    time = t.time ?: "",
+                    dateOffsetDays = computeDateOffsetDays(t.date),
+                    status = TaskStatus.PLANNED
+                )
+            }
+            TaskGroup(
+                id = g.id,
+                iconRes = null,
+                name = g.name,
+                tasks = gtasks
+            )
+        }
+    }
     // Keep runtime task status updates so progress indicators react dynamically
     val statusOverrides = remember { mutableStateMapOf<String, TaskStatus>() }
     var period by remember { mutableStateOf(ProgressPeriod.TODAY) }

@@ -35,6 +35,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,6 +48,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.wakyt.data.AppRepository
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -63,16 +65,33 @@ private data class TodayTask(
     val status: TodayFilter // use TODO/IN_PROGRESS/COMPLETED
 )
 
-private fun sampleTodayTasks(): List<TodayTask> {
-    return listOf(
-        TodayTask("1", "Office", "Android", "Standup Meeting", "09:00", 0, TodayFilter.COMPLETED),
-        TodayTask("2", "Office", "Android", "Design Review", "14:00", 0, TodayFilter.TODO),
-        TodayTask("3", "Personal", "Health", "Workout", "07:00", 0, TodayFilter.COMPLETED),
-        TodayTask("4", "Personal", "Errands", "Groceries", "18:00", 1, TodayFilter.TODO),
-        TodayTask("5", "Office", "Android", "Bug triage", "11:00", -1, TodayFilter.IN_PROGRESS),
-        TodayTask("6", "Learning", "Kotlin", "Compose Course", "20:00", 2, TodayFilter.TODO),
-        TodayTask("7", "Office", "Android", "1:1 Meeting", "16:00", 0, TodayFilter.IN_PROGRESS),
-    )
+private fun computeOffsetFromDateStr(dateStr: String?): Int {
+    if (dateStr.isNullOrBlank()) return 0
+    val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+    val target = Calendar.getInstance().apply {
+        time = fmt.parse(dateStr)!!
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+    val today = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+    val diff = target.timeInMillis - today.timeInMillis
+    return (diff / (24 * 60 * 60 * 1000)).toInt()
+}
+
+private fun sortKey(time24: String?): Int {
+    return try {
+        val parts = (time24 ?: "00:00").split(":")
+        val h = parts.getOrNull(0)?.toIntOrNull() ?: 0
+        val m = parts.getOrNull(1)?.toIntOrNull() ?: 0
+        h * 60 + m
+    } catch (_: Exception) { 0 }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -84,7 +103,26 @@ fun TodayTasksScreen(
     var isExpanded by remember { mutableStateOf(false) }
     var selectedDateOffset by remember { mutableStateOf(0) } // 0 = today
     var selectedFilter by remember { mutableStateOf(TodayFilter.ALL) }
-    val tasks = remember { sampleTodayTasks() }
+    // Observe repository for live updates
+    val repoTasks by AppRepository.tasks.collectAsState(initial = emptyList())
+    val repoProjects by AppRepository.projects.collectAsState(initial = emptyList())
+    val repoGroups by AppRepository.taskGroups.collectAsState(initial = emptyList())
+
+    val tasks = remember(repoTasks, repoProjects, repoGroups) {
+        repoTasks.map { t ->
+            val proj = t.projectId?.let { id -> repoProjects.firstOrNull { it.id == id } }
+            val group = proj?.groupId?.let { gid -> repoGroups.firstOrNull { it.id == gid } }
+            TodayTask(
+                id = t.id,
+                project = proj?.name ?: "",
+                subGroup = group?.name ?: "",
+                title = t.name,
+                time24 = t.time ?: "",
+                dateOffsetDays = computeOffsetFromDateStr(t.date),
+                status = TodayFilter.TODO
+            )
+        }.sortedWith(compareBy<TodayTask> { it.dateOffsetDays }.thenBy { sortKey(it.time24) }.thenBy { it.title })
+    }
 
     Scaffold(
         containerColor = Color.White,
